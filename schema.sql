@@ -104,6 +104,15 @@ create table audit_logs (
 
 -- Production note:
 -- Enable Row Level Security (RLS) on all tables and create policies
--- so owners only manage their own properties, tenants only manage
+-- so owners only manage their own properties, tenants only manage-- Ghar Rent: Registration fee and platform fee settings
+
+INSERT INTO platform_settings (key, value_json)
+VALUES
+  ('registration_fee_inr', '{"value":300.00}'),
+  ('platform_fee_percent', '{"value":2.00}')
+ON CONFLICT (key)
+DO UPDATE SET
+  value_json = EXCLUDED.value_json,
+  updated_at = now();
 -- their own requests, and platform_settings is admin-only.
 -- Payment status must be changed only by verified server/webhook logic.
