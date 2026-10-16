@@ -58,7 +58,7 @@ create table agreements (
   owner_id uuid not null references profiles(id),
   tenant_id uuid not null references profiles(id),
   monthly_rent numeric(12,2) not null check (monthly_rent > 0),
-  platform_fee_percent numeric(5,2) not null default 0.50,
+  platform_fee_percent numeric(5,2) not null default 2.00,
   start_date date not null,
   end_date date,
   status agreement_status not null default 'draft',
@@ -89,7 +89,7 @@ create table platform_settings (
 );
 
 insert into platform_settings(key, value_json)
-values ('platform_fee_percent', '{"value":0.50}')
+values ('platform_fee_percent', '{"value":2.00}')
 on conflict (key) do nothing;
 
 create table audit_logs (
