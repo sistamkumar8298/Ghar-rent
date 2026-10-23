@@ -113,6 +113,13 @@ VALUES
 ON CONFLICT (key)
 DO UPDATE SET
   value_json = EXCLUDED.value_json,
-  updated_at = now();
+  updated_at = now();-- Ghar Rent: Registration and Platform Fee Settings
+INSERT INTO public.platform_settings (key, value_json)
+VALUES
+  ('registration_fee', '{"value": 300.00}'::jsonb),
+  ('platform_fee_percent', '{"value": 2.00}'::jsonb)
+ON CONFLICT (key)
+DO UPDATE SET
+  value_json = EXCLUDED.value_json;
 -- their own requests, and platform_settings is admin-only.
 -- Payment status must be changed only by verified server/webhook logic.
