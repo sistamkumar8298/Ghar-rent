@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="hi">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ghar Rent V4</title>
+<style>
+:root{--green:#1f6b4a;--pale:#e5f1ea;--ink:#173b2c}
+*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#f7f8f4;color:var(--ink)}
+header{background:var(--green);color:#fff;padding:18px;border-radius:0 0 22px 22px}
+header h1{margin:0;font-size:25px}header p{margin:5px 0 0}
+main{max-width:850px;margin:auto;padding:16px 16px 50px}
+.search,.card,.panel{background:#fff;padding:14px;border-radius:16px;box-shadow:0 3px 12px #0001;margin:12px 0}
+input,select,textarea{width:100%;padding:12px;border:1px solid #ddd;border-radius:10px;margin:6px 0 10px;font:inherit}
+label{font-weight:700;font-size:14px}.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}
+.btn{border:0;border-radius:11px;padding:13px;font-weight:700;cursor:pointer}.primary{background:var(--green);color:#fff}.light{background:var(--pale);color:var(--green)}
+.card h3{margin:4px 0 8px}.price{font-size:21px;font-weight:800;margin:10px 0}.muted{color:#68756f;font-size:13px}
+.photos{display:flex;gap:8px;overflow:auto;margin:8px 0}.photos img{width:150px;height:110px;object-fit:cover;border-radius:10px;background:#eee}
+.tags span{display:inline-block;background:#eef4ef;padding:5px 8px;border-radius:8px;margin:4px;font-size:12px}
+.modal{display:none;position:fixed;inset:0;background:#0008;align-items:flex-end;justify-content:center;z-index:5}
+.sheet{background:#fff;width:min(850px,100%);border-radius:22px 22px 0 0;padding:18px;max-height:92vh;overflow:auto}
+.status{padding:10px;border-radius:9px;background:#fff7df;color:#684d00;font-size:13px;margin:10px 0}
+@media(max-width:560px){.row{grid-template-columns:1fr}.photos img{width:125px}}
+</style>
+</head>
+<body>
+<header><h1>Ghar Rent</h1><p>Apna ghar dhoondhiye ya khud listing kijiye</p></header>
+<main>
+  <section class="search"><input id="search" placeholder="Area, city, district ya property search karein" oninput="render()"></section>
+  <div class="actions">
+    <button class="btn primary" onclick="openOwner()">＋ Apna Ghar Jodiye</button>
+    <button class="btn light" onclick="loadProperties()">↻ Ghar Refresh Karein</button>
+  </div>
+  <div id="status" class="status">V4 frontend preview. Live Supabase/API connection ke liye API_BASE aur backend deployment configure karna hoga.</div>
+  <h2>Available Properties</h2><div id="list"></div>
+</main>
+<div class="modal" id="modal"><div class="sheet" id="sheet"></div></div>
+<script>
+/*
+  Ghar Rent V4 frontend starter.
+  Set API_BASE to your deployed backend URL before production.
+  Expected API contract:
+  GET/POST /api/properties
+  POST /api/properties/:id/photos
+  POST /api/rental-requests
+*/
+const API_BASE = ""; // Example: https://your-domain.com
+const $ = id => document.getElementById(id);
+let properties = [];
+let selectedFiles = [];
+
+function api(path, options={}) {
+  if (!API_BASE) throw new Error("API_BASE abhi configure nahi hai.");
+  return fetch(API_BASE + path, {
+    ...options,
+    headers: {...(options.body instanceof FormData ? {} : {"Content-Type":"application/json"}), ...(options.headers||{})},
+    credentials:"include"
+  }).then(async r => {
+    const data = await r.json().catch(()=>({}));
+    if (!r.ok) throw new Error(data.message || data.error || `Request failed (${r.status})`);
+    return data;
+  });
+}
+function setStatus(msg){$("status").textContent=msg;}
+function safe(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function money(v){return Number(v||0).toLocaleString("en-IN");}
+function imageUrls(p){return Array.isArray(p.photo_urls)?p.photo_urls:(Array.isArray(p.photos)?p.photos:[]);}
+function render(){
+ const q=$("search").value.toLowerCase();
+ const rows=properties.filter(p=>[p.name,p.city,p.area,p.district,p.state,p.pincode,p.bhk].join(" ").toLowerCase().includes(q));
+ $("list").innerHTML=rows.map((p,i)=>{
+   const pics=imageUrls(p);
+   const address=[p.area,p.city,p.district,p.state,p.pincode].filter(Boolean).join(", ");
+   const phone=p.owner_phone||p.owner_mobile||p.mobile_number||"";
+   return `<article class="card">
+     ${pics.length?`<div class="photos">${pics.map(src=>`<img src="${safe(src)}" alt="Ghar ki photo">`).join("")}</div>`:""}
+     <h3>${safe(p.name||p.title||"Rental Property")}</h3>
+     <div class="muted">📍 ${safe(address||"Pata uplabdh nahi")}</div>
+     <div class="price">₹${money(p.rent_amount??p.rent)} / month</div>
+     <div class="muted">Security deposit: ₹${money(p.deposit_amount??p.deposit)}</div>
+     <div class="tags"><span>${safe(p.bhk||"Property")}</span></div>
+     ${phone?`<p><b>Owner mobile:</b> <a href="tel:${safe(phone)}">${safe(phone)}</a></p>`:"<p class='muted'>Owner mobile verification ke baad dikhaya jayega.</p>"}
+     <button class="btn primary" style="width:100%" onclick="requestViewing('${safe(p.id||"")}')">Ghar dekhne ki request</button>
+   </article>`;
+ }).join("") || "<p>Abhi koi property nahi mili.</p>";
+}
+async function loadProperties(){
+ if(!API_BASE){setStatus("Demo preview: API_BASE set hone ke baad live properties load hongi.");render();return;}
+ try{
+   const data=await api("/api/properties");
+   properties=Array.isArray(data)?data:(data.properties||data.data||[]);
+   setStatus("Live property list load ho gayi.");
+   render();
+ }catch(e){setStatus("Properties load nahi hui: "+e.message);}
+}
+function closeModal(){$("modal").style.display="none";}
+function openOwner(){
+ selectedFiles=[];
+ $("sheet").innerHTML=`<h2>Owner: Naya Ghar List Karein</h2>
+ <label>Property ka naam</label><input id="pn" placeholder="Jaise 2 BHK Family Home" required>
+ <div class="row"><div><label>Mohalla / Area</label><input id="area" placeholder="Jaise Kankarbagh" required></div><div><label>City / Shehar</label><input id="city" placeholder="Patna" required></div></div>
+ <div class="row"><div><label>District / Zila</label><input id="district" placeholder="Patna" required></div><div><label>State</label><input id="state" value="Bihar" required></div></div>
+ <div class="row"><div><label>PIN code</label><input id="pincode" inputmode="numeric" maxlength="6" placeholder="800001"></div><div><label>BHK</label><select id="bhk"><option>1 BHK</option><option selected>2 BHK</option><option>3 BHK</option><option>4 BHK</option><option>Other</option></select></div></div>
+ <div class="row"><div><label>Monthly rent (₹)</label><input id="rent" type="number" min="1" placeholder="9000" required></div><div><label>Security deposit (₹)</label><input id="deposit" type="number" min="0" placeholder="18000"></div></div>
+ <label>Ghar ki poori jankari / landmark</label><textarea id="details" rows="2" placeholder="Road, landmark, floor, etc."></textarea>
+ <label>Ghar ki photos (multiple select kar sakte hain)</label><input id="photos" type="file" accept="image/*" multiple onchange="previewPhotos()">
+ <div id="preview" class="photos"></div>
+ <label>Owner ka naam</label><input id="owner_name" placeholder="Aapka poora naam" required>
+ <label>Owner ka mobile number</label><input id="owner_phone" type="tel" inputmode="numeric" maxlength="10" placeholder="10 digit mobile number" required>
+ <div class="status">Mobile number listing par tabhi dikhaya jayega jab backend verification aur privacy settings allow karein. Admin ko owner details secure database mein milni chahiye.</div>
+ <button class="btn primary" style="width:100%" onclick="publishProperty()">Listing Submit Karein</button>
+ <button class="btn light" style="width:100%;margin-top:8px" onclick="closeModal()">Cancel</button>`;
+ $("modal").style.display="flex";
+}
+function previewPhotos(){
+ selectedFiles=[...$("photos").files];
+ $("preview").innerHTML=selectedFiles.map(f=>`<img src="${URL.createObjectURL(f)}" alt="Photo preview">`).join("");
+}
+async function publishProperty(){
+ const phone=$("owner_phone").value.trim(), rent=Number($("rent").value);
+ if(!$("pn").value.trim()||!$("area").value.trim()||!$("city").value.trim()||!$("district").value.trim()||!rent||!$("owner_name").value.trim()||!/^[6-9]\d{9}$/.test(phone)){
+   alert("Property name, area, city, district, valid rent, owner name aur 10 digit mobile number bhariye.");return;
+ }
+ if(!API_BASE){alert("Abhi frontend preview hai. Live save ke liye deployed V4 backend/API connect karna zaroori hai. Aapki entry is preview mein save nahi hogi.");return;}
+ try{
+   const payload={
+     name:$("pn").value.trim(), area:$("area").value.trim(), city:$("city").value.trim(),
+     district:$("district").value.trim(), state:$("state").value.trim(), pincode:$("pincode").value.trim(),
+     bhk:$("bhk").value, rent_amount:rent, deposit_amount:Number($("deposit").value||0),
+     details:$("details").value.trim(), owner_name:$("owner_name").value.trim(), owner_phone:phone
+   };
+   const result=await api("/api/properties",{method:"POST",body:JSON.stringify(payload)});
+   const property=result.property||result.data||result;
+   const id=property.id;
+   if(selectedFiles.length&&id){
+     const fd=new FormData();selectedFiles.forEach(f=>fd.append("photos",f));
+     await api(`/api/properties/${encodeURIComponent(id)}/photos`,{method:"POST",body:fd});
+   }
+   alert("Listing submit ho gayi.");closeModal();await loadProperties();
+ }catch(e){alert("Listing save nahi hui: "+e.message);}
+}
+async function requestViewing(id){
+ if(!id){alert("Demo property par request submit nahi ho sakti.");return;}
+ if(!API_BASE){alert("Viewing request ke liye V4 backend connect karna hoga.");return;}
+ try{
+   await api("/api/rental-requests",{method:"POST",body:JSON.stringify({property_id:id,request_type:"viewing"})});
+   alert("Ghar dekhne ki request bhej di gayi.");
+ }catch(e){alert("Request submit nahi hui: "+e.message);}
+}
+loadProperties();
+</script>
+</body></html>
